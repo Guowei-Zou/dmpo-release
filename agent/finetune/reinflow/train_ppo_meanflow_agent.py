@@ -45,6 +45,8 @@ class TrainPPOMeanFlowAgent(TrainPPOShortCutAgent):
 
     def __init__(self, cfg):
         super().__init__(cfg)
+        self.buffer_device = 'cpu'
+        self.grad_accumulate = cfg.train.get("grad_accumulate", 1)
         log.info("Initialized MeanFlow PPO training agent with low-dim observations")
 
         # MeanFlow uses 5 inference steps by default (as per original paper)
@@ -158,110 +160,7 @@ class TrainPPOMeanFlowAgent(TrainPPOShortCutAgent):
             "min_logprob_noise_std": self.model.min_logprob_denoising_std,
             "min_sampling_noise_std": self.model.min_sampling_denoising_std,
             "noise_std": noise_stds,
-            "Q_values": self.Q_values  # Old Q values for consistency with diffusion PPO
+            "Q_values": newQ_values
         }
 
-    def run(self):
-        """
-        Main training loop for MeanFlow PPO fine-tuning.
-
-        This follows the same structure as the parent class but includes
-        MeanFlow-specific logging and monitoring.
-        """
-        log.info("Starting MeanFlow PPO fine-tuning training loop")
-
-        self.init_buffer()
-        self.prepare_run()
-        self.buffer.reset()
-
-        if self.resume:
-            self.resume_training()
-
-        # Main training progress bar
-        train_itr_pbar = tqdm(
-            total=self.n_train_itr,
-            desc="MeanFlow Training Iterations",
-            unit="itr",
-            dynamic_ncols=True,
-            ascii=True,
-            initial=self.itr
-        )
-
-        while self.itr < self.n_train_itr:
-            self.prepare_video_path()
-            self.set_model_mode()
-            self.reset_env(buffer_device=self.buffer_device)
-            self.buffer.update_full_obs()
-
-            # Data collection phase
-            for step in tqdm(range(self.n_steps), desc="Collecting samples", leave=False) if self.verbose else range(self.n_steps):
-                if not self.verbose and step % 100 == 0:
-                    print(f"MeanFlow processed {step} of {self.n_steps}")
-
-                with torch.no_grad():
-                    # Prepare proprioceptive observations
-                    cond = {
-                        "state": torch.from_numpy(self.prev_obs_venv["state"])
-                        .float()
-                        .to(self.device)
-                    }
-
-                    # Sample actions using MeanFlow
-                    action_samples, chains_venv = self.get_samples(
-                        cond=cond,
-                        ret_device=self.buffer_device,
-                        normalize_denoising_horizon=self.normalize_denoising_horizon,
-                        normalize_act_space_dimension=self.normalize_act_space_dim,
-                        clip_intermediate_actions=self.clip_intermediate_actions,
-                        account_for_initial_stochasticity=self.account_for_initial_stochasticity
-                    )
-
-                # Execute actions in environment
-                action_venv = action_samples[:, :self.act_steps]
-                obs_venv, reward_venv, terminated_venv, truncated_venv, info_venv = self.venv.step(action_venv)
-
-                # Store experience in buffer
-                self.buffer.add(step, self.prev_obs_venv, chains_venv, reward_venv, terminated_venv, truncated_venv)
-
-                self.prev_obs_venv = obs_venv
-                self.cnt_train_step += self.n_envs * self.act_steps if not self.eval_mode else 0
-
-            # Episode summary
-            self.buffer.summarize_episode_reward()
-
-            if not self.eval_mode:
-                # Update buffer with final observations and perform training update
-                self.buffer: PPOFlowBuffer
-                self.buffer.update(obs_venv, self.model)
-                self.agent_update(verbose=self.verbose)
-
-            # Logging and checkpointing
-            self.log()
-            self.update_lr()
-            self.update_bc_coeff()  # Update BC loss coefficient (decay schedule)
-            self.adjust_finetune_schedule()  # Update MeanFlow policy scheduler
-            self.save_model()
-
-            # Update main progress bar with key metrics
-            if self.itr % self.log_freq == 0:
-                train_itr_pbar.set_postfix({
-                    'mode': 'Eval' if self.eval_mode else 'Train',
-                    'reward': f'{self.buffer.avg_episode_reward:.2f}',
-                    'success': f'{self.buffer.success_rate*100:.1f}%'
-                })
-            train_itr_pbar.update(1)
-
-            self.itr += 1
-
-            # Early stopping for failed fine-tuning
-            if self.use_early_stop and (self.buffer.success_rate < 0.05 or self.buffer.avg_episode_reward < 2.0):
-                log.error(f"MeanFlow finetuning failed. success_rate={self.buffer.success_rate*100:.2f}% and avg_episode_reward={self.buffer.avg_episode_reward:.2f}")
-                train_itr_pbar.close()
-                exit()
-
-            self.clear_cache()
-            self.inspect_memory()
-
-        # Close progress bar cleanly
-        train_itr_pbar.close()
-        log.info("MeanFlow PPO fine-tuning completed successfully!")
+    # run() inherited from TrainPPOShortCutAgent - uses get_samples_logprobs() correctly

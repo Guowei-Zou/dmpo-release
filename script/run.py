@@ -30,9 +30,12 @@ from util.clear_pycache import clean_pycache
 from util.dirs import REINFLOW_DIR
 clean_pycache(directory=REINFLOW_DIR)
 
-# register kitchen tasks in advance. prevent env not found error. 
+# register kitchen tasks in advance. prevent env not found error.
 import gym
-import d4rl.gym_mujoco
+try:
+    import d4rl.gym_mujoco
+except Exception:
+    pass  # d4rl not needed for maniskill/libero tasks
 
 import gc
 gc.collect()

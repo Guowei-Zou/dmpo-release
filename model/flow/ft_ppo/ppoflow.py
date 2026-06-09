@@ -251,13 +251,13 @@ class PPOFlow(nn.Module):
         chains_vel  = torch.zeros_like(chains_prev, device=self.device)         # [batchsize, self.inference_steps, self.horizon_steps x self.action_dim]
 
         dt = 1.0/self.inference_steps
-        steps = torch.linspace(0, 1-dt, self.inference_steps).repeat(B, 1).to(self.device)  # [batchsize, self.inference_steps]. the points sampled by linspace include the left and right boundaries. so we use 1-dt as the right boundary.  
+        steps = torch.linspace(0, 1, self.inference_steps).repeat(B, 1).to(self.device)  # [batchsize, self.inference_steps]. Must match get_actions() time schedule exactly.
         for i in range(self.inference_steps):
             t       = steps[:,i]
             xt      = x_chain[:,i]                                              # [batchsize, self.horizon_steps , self.action_dim]
             vt, nt  =self.actor_ft.forward(xt, t, cond, True, i)                # [batchsize, self.horizon_steps, self.action_dim]
             chains_vel[:,i]  = vt.flatten(-2,-1)                                # [batchsize, self.horizon_steps x self.action_dim]
-            chains_stds[:,i] = nt                                               # [batchsize, self.horizon_steps x self.action_dim]
+            chains_stds[:,i] = torch.clamp(nt, min=self.min_sampling_denoising_std)  # [batchsize, self.horizon_steps x self.action_dim]
             logprob_steps+=1
         chains_mean = (chains_prev + chains_vel * dt)                           # [batchsize, self.inference_steps, self.horizon_steps x self.action_dim]
         if clip_intermediate_actions:

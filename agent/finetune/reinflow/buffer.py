@@ -206,7 +206,7 @@ class PPOBuffer:
             else:
                 episode_best_reward = np.array(
                     [
-                        np.max(reward_traj) / self.act_steps
+                        np.max(reward_traj)
                         for reward_traj in reward_trajs_split
                     ]
                 )
@@ -215,7 +215,7 @@ class PPOBuffer:
             self.success_rate = np.mean(
                 episode_best_reward >= self.best_reward_threshold_for_success
             )
-            
+
             # Calculate standard errors (consistent with eval)
             n_eps = len(episode_reward)
             reward_std = np.std(episode_reward, ddof=1) if n_eps > 1 else 0.0
@@ -435,7 +435,7 @@ class PPODiffusionBufferGPU(PPODiffusionBuffer):
             else:
                 episode_best_reward = np.array(
                     [
-                        np.max(reward_traj) / self.act_steps
+                        np.max(reward_traj)
                         for reward_traj in reward_trajs_split
                     ]
                 )
@@ -1006,7 +1006,7 @@ class PPOFlowBufferGPU(PPOFlowBuffer):
             else:
                 episode_best_reward = np.array(
                     [
-                        np.max(reward_traj) / self.act_steps
+                        np.max(reward_traj)
                         for reward_traj in reward_trajs_split
                     ]
                 )

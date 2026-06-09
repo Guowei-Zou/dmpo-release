@@ -190,6 +190,7 @@ class TrainPPOShortCutAgent(TrainPPOAgent):
             
             self.log()                                          # diffusion_min_sampling_std
             self.update_lr()
+            self.update_bc_coeff()
             self.adjust_finetune_schedule()# update finetune scheduler of ReFlow Policy
             self.save_model()
             self.itr += 1 
